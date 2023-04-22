@@ -34,8 +34,8 @@ class HyperspectralPatchLmdbDataset(Dataset):
         patch_size = (int(key_split[-2]), int(key_split[-1]))
         channels = int(key_split[-4])
         patch = np.frombuffer(patch, dtype=np.float32).reshape((channels, patch_size[0], patch_size[1]))
-        
-        anchor = torch.from_numpy(patch).to(self.device)
+        #patch = np.copy(patch)
+        anchor = torch.from_numpy(np.copy(patch)).to(self.device)
 
         if self.normalize:
             normalize_transform = transforms.Normalize(mean=self.mean, std=self.std + 1e-8)
