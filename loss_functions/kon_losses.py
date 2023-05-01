@@ -143,4 +143,5 @@ class NTXentLoss(torch.nn.Module):
     # print(prob)
     # print('========== LOSS ==========')
     # print(loss)
+    
         
