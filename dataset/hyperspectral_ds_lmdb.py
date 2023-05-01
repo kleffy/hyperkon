@@ -4,7 +4,11 @@ import lmdb
 import torch
 import numpy as np
 import pandas as pd
+import argparse
+import json
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
+from datetime import datetime
 from torch.utils.data import DataLoader, Dataset
 from kornia import augmentation as K
 from kornia.augmentation import AugmentationSequential
@@ -21,6 +25,8 @@ class HyperspectralPatchLmdbDataset(Dataset):
         self.lmdb_save_dir = lmdb_save_dir
         self.lmdb_file_name = lmdb_file_name
         self.normalize = normalize
+        self.mean = mean_file
+        self.std = std_file
         
     def __len__(self):
         return len(self.keys)
@@ -33,8 +39,7 @@ class HyperspectralPatchLmdbDataset(Dataset):
         key_split = key.split("_")
         patch_size = (int(key_split[-2]), int(key_split[-1]))
         channels = int(key_split[-4])
-        patch = np.frombuffer(patch, dtype=np.float32).reshape((channels, patch_size[0], patch_size[1]))
-        #patch = np.copy(patch)
+        patch = np.frombuffer(patch, dtype=np.float32).reshape((-1, patch_size[0], patch_size[1]))
         anchor = torch.from_numpy(np.copy(patch)).to(self.device)
 
         if self.normalize:
@@ -47,9 +52,11 @@ class HyperspectralPatchLmdbDataset(Dataset):
         return anchor[:self.channels, :, :], positive.squeeze()[:self.channels, :, :]
     
     def _kornia_augmentation(self):
-        aug_list = AugmentationSequential(
-            K.RandomGaussianBlur(kernel_size=(9,9), sigma=(0.1, 2.0), p=0.5),
+        aug_list = K.AugmentationSequential(
             K.RandomHorizontalFlip(),
+            K.RandomVerticalFlip(),
+            K.RandomGaussianNoise(mean=0.0, std=0.05, p=0.8),
+            K.RandomGaussianBlur(kernel_size=(9,9), sigma=(0.1, 2.0), p=0.8),
             same_on_batch=True,
         )
         return aug_list
@@ -63,10 +70,18 @@ class HyperspectralPatchLmdbDataset(Dataset):
 
 
 if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    from torch.utils.tensorboard import SummaryWriter
-    import torchvision
-    from datetime import datetime
+    # Parse the arguments
+    if 1:
+        config_path = r'config/config_1.json'
+    else:
+        config_path = None
+    parser = argparse.ArgumentParser(description='HyperKon Training')
+    parser.add_argument('-c', '--config', default=config_path,type=str,
+                            help='Path to the config file')
+    args = parser.parse_args()
+    
+    config = json.load(open(args.config))
+    
 
     def extract_rgb(data, r_range:tuple, g_range:tuple, b_range:tuple) -> np.ndarray:
         # print(f'extract_rgb - data shape:: {data.shape}')
@@ -95,15 +110,32 @@ if __name__ == '__main__':
         # print(np.mean(np.array(test)))
         return data
 
-    def display_image(image, save_image=False, path=None, fname='rgb_color') -> None:
-            plt.figure(figsize=(10, 6))
-            plt.axis('off')
-            plt.imshow(image)
-            plt.show()
-            if save_image:
-                if path:
-                    fname = os.path.join(path, fname)
-                plt.savefig(f'{fname}.png')
+    def display_image(image, image2=None, save_image=False, path=None, fname='rgb_color') -> None:
+        fig, axes = plt.subplots(
+                nrows=1, 
+                ncols=2 if image2 is not None else 1, 
+                #figsize=(15, 6)
+            )
+        
+        if image2 is None:
+            axes.imshow(image)
+            axes.axis('off')
+        else:
+            axes[0].imshow(image)
+            axes[0].axis('off')
+            axes[0].set_title('Anchor')
+
+            axes[1].imshow(image2)
+            axes[1].axis('off')
+            axes[1].set_title('Positive')
+
+        plt.show()
+        
+        if save_image:
+            if path:
+                fname = os.path.join(path, fname)
+            fig.savefig(f'{fname}.png')
+
 
     def move_axis(data, channel_last:bool=False):
             if channel_last:
@@ -118,22 +150,19 @@ if __name__ == '__main__':
         keys = df[csv_file_col_name].tolist()
         return keys
     
-    lmdb_save_dir = r'C:\Project\Surrey\Code\hyperkon\database'
-    log_dir = r'C:\Project\Surrey\Code\hyperkon\logs'
+    lmdb_save_dir = config["lmdb_save_dir"]
+    log_dir = config["log_dir"]
+    lmdb_file_name = config["lmdb_file_name"] 
+    columns = config["columns"]
+    csv_file_name = config["csv_file_name"]
+    channels = config["in_channels"]
+    normalize = config["normalize"]
     mean_file = None
     std_file = None
-    
-    lmdb_file_name = 'EP_PS224_S224_O00_N5_L1_CHW_V1.lmdb' 
-    columns = ['enmap_patches_keys']
-    csv_file_name = 'EP_PS224_S224_O00_N5_L1_CHW_V1.csv'
-    channels = 224
     start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    normalize = False
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    writer_name_tag = f'test_tb_images_{timestamp}'
-    writer = SummaryWriter(os.path.join(log_dir, writer_name_tag))
     
     keys = read_csv_keys(os.path.join(lmdb_save_dir, csv_file_name), columns[0])
     
@@ -142,20 +171,17 @@ if __name__ == '__main__':
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=True)
 
     for i, (anchor, positive) in enumerate(dataloader):
-        print(f'Batch {i+1} anchor shape: {anchor.shape}')
-        print(f'Batch {i+1} positive shape: {positive.shape}')
+        # print(f'Batch {i+1} anchor shape: {anchor.shape}')
+        # print(f'Batch {i+1} positive shape: {positive.shape}')
 
-        print(anchor.shape)
-        #anchor = move_axis(anchor.squeeze().cpu().numpy(), True)
-        #print(anchor.shape)
-        rgb_img = extract_rgb(data=anchor.squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
-        # rgb_img = (rgb_img - np.min(rgb_img))/np.ptp(rgb_img)
-        # rgb_img = extract_percentile_range(rgb_img, 2, 98)
-        print(rgb_img.dtype)
-        rgb_img = move_axis(rgb_img, True)
-        display_image(rgb_img)
+        a_img = extract_rgb(data=anchor.squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+        p_img = extract_rgb(data=positive.squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+       
+        a_img = move_axis(a_img, True)
+        p_img = move_axis(p_img, True)
+        display_image(a_img, p_img)
 
-        if i == 10:
+        if i == 1:
             break
         # Deallocate GPU memory for the current batch
         del anchor
@@ -163,7 +189,6 @@ if __name__ == '__main__':
         torch.cuda.empty_cache()
     end = time.time()
 
-    writer.close()
     print(f'Elapsed time: {end - start}')
     
     # Use this dataset class for HyperKon

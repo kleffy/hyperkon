@@ -9,7 +9,7 @@ import rasterio
 
 def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_file_name, threshold=(0, -32768), 
                            skip_majority_black=True, majority_black_threshold=(0.05, 0.1), 
-                           batch_size=10, map_size=1_099_511_627_776, extract_percentile=None, normalize=True):
+                           batch_size=10, map_size=1_099_511_627_776, extract_percentile=None, normalize=False):
     keys = []
     overlap = int((1 - (stride[0] / patch_size[0])) * 100)
     env = lmdb.open(os.path.join(lmdb_save_dir, lmdb_file_name), map_size=map_size, readonly=False, map_async=True, writemap=True)
@@ -83,24 +83,26 @@ def save_keys_to_csv(save_path, keys, columns, csv_file_name):
 if __name__ == '__main__':
     
     start = time.time()
-    image_directory = r'C:\Project\Surrey\Code\hyperkon\data'
-    lmdb_save_dir = r'C:\Project\Surrey\Code\hyperkon\database'
-    lmdb_file_name = 'EP_PS224_S224_O00_N5_L1_CHW_V1.lmdb' 
+    image_directory = r'data'
+    lmdb_save_dir = r'database'
+    lmdb_file_name = 'EP_PS64_S64_O00_N1_L2_CHW_V2.lmdb' 
     columns = ['enmap_patches_keys']
-    csv_file_name = 'EP_PS224_S224_O00_N5_L1_CHW_V1.csv'
-    patch_size = (224, 224)
-    stride = (224, 224) 
+    csv_file_name = 'EP_PS64_S64_O00_N1_L2_CHW_V2.csv'
+    patch_size = (64, 64)
+    stride = (64, 64) 
     threshold = (0, -32768)
     majority_black_threshold=(0.01, 0.1)
     batch_size = 24
-    map_size= 3_255_627_776
-
+    map_size= 855_627_776
+    extract_percentile=None
+    normalize=False
+    
     print(f'{csv_file_name.split(".")[0]} Job started successfully...')
     keys = create_patches_batches(directory=image_directory, patch_size=patch_size, 
                                   stride=stride, lmdb_save_dir=lmdb_save_dir, 
                                   lmdb_file_name=lmdb_file_name, threshold=threshold,
                                   skip_majority_black=True, majority_black_threshold=majority_black_threshold, 
-                                  batch_size=batch_size, map_size=map_size)
+                                  batch_size=batch_size, map_size=map_size, extract_percentile=extract_percentile, normalize=normalize)
 
     print(f'Saving {len(keys)} key(s) to csv file...')
     save_keys_to_csv(lmdb_save_dir, keys, columns, csv_file_name)
