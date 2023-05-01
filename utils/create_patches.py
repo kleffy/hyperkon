@@ -38,9 +38,11 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
                 channels, height, width = src.count, src.height, src.width
             patch_batch = []
             if image.dtype == 'uint16':
+                dtype = np.float16
                 thold = threshold[0]
                 mbt = majority_black_threshold[0]
             else:
+                dtype = np.float32
                 thold = threshold[1]
                 mbt = majority_black_threshold[1]
                 
@@ -61,7 +63,7 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
                     if normalize:
                         patch = _normalize_image(patch)
 
-                    patch = np.ascontiguousarray(patch, dtype=np.float32)
+                    patch = np.ascontiguousarray(patch, dtype=dtype)
                     key = f"{file_name.split('.')[0]}_{patch.dtype}_CHW_{x}_{y}_{overlap}_{channels}_{stride[0]}_{patch_size[0]}_{patch_size[1]}"
                     keys.append(key)
                     patch_batch.append((key, patch))
