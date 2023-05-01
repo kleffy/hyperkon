@@ -1,0 +1,28 @@
+{
+    "tag": "1",
+    "experiment_name": "SqueezeExcitation",
+    "log_dir": "logs",
+    "experiment_dir": "experiments",
+    "lmdb_save_dir": "database",
+    "l1_mean_file": null,
+    "l1_std_file": null,
+    "l2_mean_file": null,
+    "l2_std_file": null,
+    "lmdb_file_name":"EP_PS64_S64_O00_N1_L2_CHW_V2.lmdb",
+    "csv_file_name": "EP_PS64_S64_O00_N1_L2_CHW_V2.csv",
+    "lmdb_file_name_val": "EP_PS224_S224_O00_N1_L2_CHW_V1.lmdb",
+    "csv_file_name_val": "EP_PS224_S224_O00_N1_L2_CHW_V1.csv",
+    "columns": ["enmap_patches_keys"],
+    "in_channels": 224,
+    "num_epochs": 50,
+    "batch_size": 15,
+    "val_split": 0.3,
+    "out_features": 128,
+    "normalize": false,
+    "k":1,
+    "learning_rate":1e-4,
+    "tmn_list": [],
+    "resnext": 50,
+    "val_frequency": 10
+
+}
