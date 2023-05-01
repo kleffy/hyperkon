@@ -90,4 +90,3 @@ if __name__ == '__main__':
     model = SqueezeExcitation(in_channels, embedding_dim, num_classes)
 
     print(model)
-    
