@@ -2,7 +2,10 @@ data/
 database/
 logs/
 experiments/
-
+condor/
+c_logs
+docker_stderror
+*.json
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode
