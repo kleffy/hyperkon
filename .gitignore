@@ -3,7 +3,8 @@ database/
 logs/
 experiments/
 condor/
-c_logs
+c_logs/
+config/
 docker_stderror
 *.json
 

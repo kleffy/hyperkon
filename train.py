@@ -233,7 +233,7 @@ def compute_top_k_accuracy(dataloader, fextractor, step_num, writer, topk_tag, k
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
-        config_path = r'config/config_1.json'
+        config_path = r'config/config_4.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
