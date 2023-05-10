@@ -3,9 +3,11 @@ database/
 logs/
 experiments/
 condor/
-c_logs
+c_logs/
+config/
 docker_stderror
 *.json
+config/config_1.json
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode

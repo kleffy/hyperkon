@@ -61,8 +61,15 @@ class SqueezeExcitation(nn.Module):
         self.conv2 = nn.Conv3d(256, 512, kernel_size=(3, 1, 1), padding=(1, 0, 0))
         self.bn2 = nn.BatchNorm3d(512)
         self.gap = nn.AdaptiveAvgPool3d(1)
-        self.fc = nn.Linear(512, embedding_dim)
+        # self.projector = nn.Linear(512, embedding_dim)
         #self.softmax = nn.Linear(embedding_dim, num_classes)
+
+        self.projector = nn.Sequential(
+            nn.Linear(in_features=512, out_features=512),
+            nn.ReLU(inplace=True),
+            nn.Dropout(p=0.65),
+            nn.Linear(in_features=512, out_features=embedding_dim),
+        )
 
     def forward(self, x):
         # Process spatial information
@@ -78,7 +85,7 @@ class SqueezeExcitation(nn.Module):
         x = F.relu(self.bn2(self.conv2(x)))
         x = self.gap(x)
         x = torch.flatten(x, start_dim=1)
-        x = self.fc(x)
+        x = self.projector(x)
         #x = self.softmax(x)
         return x
 

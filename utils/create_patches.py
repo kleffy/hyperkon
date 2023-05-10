@@ -34,18 +34,15 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
     try:
         with env.begin(write=True) as txn:
             for file_name in tqdm(os.listdir(directory)):
-                # image = io.imread(os.path.join(directory, file_name))
-                # channels, height, width = image.shape
+
                 with rasterio.open(os.path.join(directory, file_name)) as src:
                     image = src.read()
                     channels, height, width = src.count, src.height, src.width
                 patch_batch = []
                 if image.dtype == 'uint16':
-                    # dtype = np.float16
                     thold = threshold[0]
                     mbt = majority_black_threshold[0]
                 else:
-                    # dtype = np.float32
                     thold = threshold[1]
                     mbt = majority_black_threshold[1]
                     
@@ -80,11 +77,10 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
                         txn.put(patch_batch[i][0].encode(), patch_batch[i][1])
         env.close()
     except Exception as e:
-        raised_error = True
         print("An error occurred while saving patches to LMDB. Keys of successfully saved patches will be returned.")
         traceback.print_exc()
         return keys
-    return keys, raised_error
+    return keys
 
 def save_keys_to_csv(save_path, keys, columns, csv_file_name):
     keys_df = pd.DataFrame(keys, columns=columns)
@@ -116,19 +112,17 @@ if __name__ == '__main__':
     threshold = (0, -32768)
     majority_black_threshold=(0.01, 0.1)
     batch_size = 24
-    map_size= 60_855_627_776
+    map_size= 100_555_627_776
+
     extract_percentile=None
     normalize=False
         
     print(f'{csv_file_name.split(".")[0]} Job started successfully...')
-    keys, raised_error = create_patches_batches(directory=image_directory, patch_size=patch_size, 
+    keys = create_patches_batches(directory=image_directory, patch_size=patch_size, 
                                   stride=stride, lmdb_save_dir=lmdb_save_dir, 
                                   lmdb_file_name=lmdb_file_name, threshold=threshold,
                                   skip_majority_black=True, majority_black_threshold=majority_black_threshold, 
                                   batch_size=batch_size, map_size=map_size, extract_percentile=extract_percentile, normalize=normalize)
-
-    if raised_error:
-        keys = check_keys_in_lmdb(keys=keys, lmdb_save_dir=lmdb_save_dir, lmdb_file_name=lmdb_file_name)
         
     print(f'Saving {len(keys)} key(s) to csv file...')
     save_keys_to_csv(lmdb_save_dir, keys, columns, csv_file_name)
