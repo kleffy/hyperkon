@@ -39,8 +39,8 @@ class HyperspectralPatchLmdbDataset(Dataset):
         key_split = key.split("_")
         patch_size = (int(key_split[-2]), int(key_split[-1]))
         channels = int(key_split[-4])
-        dtype = np.float16 if key_split[-9] == 'uint16' else np.float32
-        patch = np.frombuffer(patch, dtype=dtype).reshape((-1, patch_size[0], patch_size[1]))
+        # dtype = np.float16 if key_split[-9] == 'uint16' else np.float32
+        patch = np.frombuffer(patch, dtype=np.float32).reshape((-1, patch_size[0], patch_size[1]))
         anchor = torch.from_numpy(np.copy(patch)).to(self.device)
 
         if self.normalize:
@@ -107,8 +107,6 @@ if __name__ == '__main__':
         data[data[:,:,:] < plo] = plo
         data[data[:,:,:] >= phi] = phi
         data = (data - plo) / (phi - plo) #np.percentile(data, hi)
-        # test.append([plo,phi])
-        # print(np.mean(np.array(test)))
         return data
 
     def display_image(image, image2=None, save_image=False, path=None, fname='rgb_color') -> None:
@@ -171,7 +169,7 @@ if __name__ == '__main__':
                                             channels, device, normalize, mean_file=mean_file, std_file=std_file)
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=True)
 
-    for i, (anchor, positive) in enumerate(dataloader):
+    for i, (anchor, positive) in enumerate(dataloader, 520):
         # print(f'Batch {i+1} anchor shape: {anchor.shape}')
         # print(f'Batch {i+1} positive shape: {positive.shape}')
 
@@ -182,7 +180,7 @@ if __name__ == '__main__':
         p_img = move_axis(p_img, True)
         display_image(a_img, p_img)
 
-        if i == 1:
+        if i == 530:
             break
         # Deallocate GPU memory for the current batch
         del anchor
