@@ -14,6 +14,7 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
     keys = []
     overlap = int((1 - (stride[0] / patch_size[0])) * 100)
     env = lmdb.open(os.path.join(lmdb_save_dir, lmdb_file_name), map_size=map_size, readonly=False, map_async=True, writemap=True)
+    raised_error = False
 
     def _extract_percentile_range(data, lo, hi):
         plo = np.percentile(data, lo)
@@ -33,6 +34,7 @@ def create_patches_batches(directory, patch_size, stride, lmdb_save_dir, lmdb_fi
     try:
         with env.begin(write=True) as txn:
             for file_name in tqdm(os.listdir(directory)):
+
                 with rasterio.open(os.path.join(directory, file_name)) as src:
                     image = src.read()
                     channels, height, width = src.count, src.height, src.width
@@ -84,6 +86,19 @@ def save_keys_to_csv(save_path, keys, columns, csv_file_name):
     keys_df = pd.DataFrame(keys, columns=columns)
     keys_df.to_csv(os.path.join(save_path, csv_file_name), index=False)
 
+def check_keys_in_lmdb(keys, lmdb_save_dir, lmdb_file_name):
+    keys_in_lmdb = []
+    env = lmdb.open(os.path.join(lmdb_save_dir, lmdb_file_name), map_size=1_099_511_627_776, readonly=True)
+    with env.begin() as txn:
+        cursor = txn.cursor()
+        for key in cursor.iternkeys():
+            key_str = key.decode('utf-8')
+            if key_str in keys:
+                keys_in_lmdb.append(key_str)
+    env.close()
+    return keys_in_lmdb
+
+
 if __name__ == '__main__':
     
     start = time.time()
@@ -98,6 +113,7 @@ if __name__ == '__main__':
     majority_black_threshold=(0.01, 0.1)
     batch_size = 24
     map_size= 100_555_627_776
+
     extract_percentile=None
     normalize=False
         
