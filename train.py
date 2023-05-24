@@ -17,7 +17,7 @@ from sklearn.model_selection import train_test_split
 from dataset.hyperspectral_ds_lmdb import HyperspectralPatchLmdbDataset
 from models.resnext_3D import resnext50, resnext101, resnext152
 from models.hyperkon_2D_3D import HyperKon_2D_3D
-from models.squeeze_excitation import SqueezeExcitation
+from models.squeeze_excitation_v3 import SqueezeExcitation
 
 from loss_functions.kon_losses import NTXentLoss
 
@@ -233,7 +233,7 @@ def compute_top_k_accuracy(dataloader, fextractor, step_num, writer, topk_tag, k
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
-        config_path = r'config/config_4.json'
+        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_21.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
@@ -317,20 +317,27 @@ if __name__ == "__main__":
     overall_vloss = 1_000_000.0
     msg =''
     
-    writer_name_tag = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_{tag}'
+    writer_name_tag = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_OF{out_features}_{tag}'
     writer = SummaryWriter(os.path.join(log_dir, writer_name_tag))
     
-    # if config.get("resnext") == 101:
-    #     print("Initialised ResNext101!")
-    #     model = resnext101(in_channels=in_channels, out_features=out_features)
-    # elif config.get("resnext") == 152:
-    #     print("Initialised ResNext152!")
-    #     model = resnext152(in_channels=in_channels, out_features=out_features)
-    # else:
-    #     print("Initialised ResNext50!")
-    #     model = resnext50(in_channels=in_channels, out_features=out_features)
-   
-    model = SqueezeExcitation(in_channels, out_features).to(device)
+    if config.get("resnext") == 101:
+        print("Initialised ResNext101!")
+        model = resnext101(in_channels=in_channels, out_features=out_features).to(device)
+    elif config.get("resnext") == 152:
+        print("Initialised ResNext152!")
+        model = resnext152(in_channels=in_channels, out_features=out_features).to(device)
+    elif config.get("resnext") == 50:
+        print("Initialised ResNext50!")
+        model = resnext50(in_channels=in_channels, out_features=out_features).to(device)
+    elif config.get("resnext") == 0:
+        print("Initialised SqueezeExcitation!")
+        embedding_dim = 512
+        model = SqueezeExcitation(in_channels, embedding_dim, out_features).to(device)
+    else:
+        print("Initialised HyperKon_2D_3D!")
+        #embedding_dim = 512
+        model = HyperKon_2D_3D(in_channels, out_features).to(device)
+
     criterion = NTXentLoss()
     criterion = criterion.to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
@@ -339,7 +346,7 @@ if __name__ == "__main__":
     best_vloss = 1_000_000.0
     val_loss = 1_000_001.0
 
-    model_name = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_{tag}'
+    model_name = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_OF{out_features}_{tag}'
     model_path = os.path.join(experiment_dir, model_name + ".pth")
     start_epoch = 0
 
@@ -365,7 +372,7 @@ if __name__ == "__main__":
             dataset_obj=train_dataset,
         )
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+        # print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
         
         if (epoch + 1) % config["val_frequency"] == 0:
             val_loss, top_k_accuracy_val = validate(

@@ -40,7 +40,7 @@ class ResNeXtBottleneck(nn.Module):
         super(ResNeXtBottleneck, self).__init__()
         mid_planes = cardinality * int(planes / 32)
         self.conv1 = nn.Conv3d(inplanes, mid_planes, kernel_size=1, bias=False)
-        self.bn1 = nn.BatchNorm3d(mid_planes)
+        self.ln1 = nn.LayerNorm(mid_planes)
         self.conv2 = nn.Conv3d(
             mid_planes,
             mid_planes,
@@ -49,27 +49,33 @@ class ResNeXtBottleneck(nn.Module):
             padding=1,
             groups=cardinality,
             bias=False)
-        self.bn2 = nn.BatchNorm3d(mid_planes)
+        self.ln2 = nn.LayerNorm(mid_planes)
         self.conv3 = nn.Conv3d(
             mid_planes, planes * self.expansion, kernel_size=1, bias=False)
-        self.bn3 = nn.BatchNorm3d(planes * self.expansion)
+        self.ln3 = nn.LayerNorm(planes * self.expansion)
         self.relu = nn.ReLU(inplace=True)
         self.downsample = downsample
         self.stride = stride
 
     def forward(self, x):
+        """The permute function is used to change the order of dimensions, 
+        because LayerNorm by default applies normalization over the last dimension. 
+        We want to apply normalization over the channels dimension, so we need to 
+        move the channels dimension to the end before applying LayerNorm, 
+        and then move it back to its original position afterwards.
+        """
         residual = x
 
         out = self.conv1(x)
-        out = self.bn1(out)
+        out = self.ln1(out.permute(0, 2, 3, 4, 1)).permute(0, 4, 1, 2, 3)
         out = self.relu(out)
 
         out = self.conv2(out)
-        out = self.bn2(out)
+        out = self.ln2(out.permute(0, 2, 3, 4, 1)).permute(0, 4, 1, 2, 3)
         out = self.relu(out)
 
         out = self.conv3(out)
-        out = self.bn3(out)
+        out = self.ln3(out.permute(0, 2, 3, 4, 1)).permute(0, 4, 1, 2, 3)
 
         if self.downsample is not None:
             residual = self.downsample(x)
@@ -144,7 +150,7 @@ class ResNeXt(nn.Module):
             padding=(0, 3, 3),
             bias=False)
         
-        self.bn1 = nn.BatchNorm3d(in_channels)
+        self.ln1 = nn.LayerNorm(in_channels)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool3d(kernel_size=(1, 3, 3), stride=(1, 2, 2), padding=(0, 1, 1))
 
@@ -187,7 +193,7 @@ class ResNeXt(nn.Module):
                         pbe,
                         kernel_size=1,
                         stride=stride,
-                        bias=False), nn.BatchNorm3d(planes * block.expansion))
+                        bias=False), nn.LayerNorm(planes * block.expansion))
 
         layers = []
         layers.append(
@@ -200,7 +206,7 @@ class ResNeXt(nn.Module):
 
     def forward(self, x):
         x = self.conv1(x)
-        x = self.bn1(x)
+        x = self.ln1(x.permute(0, 2, 3, 4, 1)).permute(0, 4, 1, 2, 3)
         x = self.relu(x)
         x = self.maxpool(x)
 

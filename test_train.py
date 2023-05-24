@@ -9,10 +9,11 @@ import os
 from tqdm import tqdm
 
 from dataset.hyperspectral_ds_lmdb import HyperspectralPatchLmdbDataset
-from models.squeeze_excitation import SqueezeExcitation
+# from models.squeeze_excitation import SqueezeExcitation
 from models.hyperkon_2D_3D import HyperKon_2D_3D
 from models.resnext_3D import resnext101, resnext50
 from loss_functions.kon_losses import NTXentLoss, ContrastiveLoss
+from models.squeeze_excitation_v3 import SqueezeExcitation
 
 
 
@@ -24,11 +25,11 @@ batch_size = 5
 learning_rate = 1e-2
 
 height = width = 64
-# num_classes = 10
-embedding_dim = 128
+num_classes = 128
+embedding_dim = 256
 # model = HyperKon_2D_3D(channels, embedding_dim).to(device)
 # model = resnext50(in_channels=channels, out_features=embedding_dim).to(device)
-model = SqueezeExcitation(channels, embedding_dim).to(device)
+model = SqueezeExcitation(channels, embedding_dim, num_classes).to(device)
 
 criterion = ContrastiveLoss()
 criterion = criterion.to(device)

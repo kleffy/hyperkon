@@ -204,3 +204,7 @@ pyrightconfig.json
 
 # End of https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 config/config_1.json
+train_t2.py
+train_t.py
+train_pl.py
+test_train.py

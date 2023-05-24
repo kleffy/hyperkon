@@ -87,17 +87,17 @@ def save_keys_to_csv(save_path, keys, columns, csv_file_name):
 if __name__ == '__main__':
     
     start = time.time()
-    image_directory = r'/vol/research/RobotFarming/Projects/hyper_downloader/pre_process'
+    image_directory = r'/vol/research/RobotFarming/Projects/hyper_downloader/N1_1C'
     lmdb_save_dir = r'/vol/research/RobotFarming/Projects/hyperkon/database'
-    lmdb_file_name = 'EP_PS160_S160_O00_N122_L1_CHW_V2.lmdb' 
+    lmdb_file_name = 'EP_PS160_S160_O00_N1_L1_CHW_V2.lmdb' 
     columns = ['enmap_patches_keys']
-    csv_file_name = 'EP_PS160_S160_O00_N122_L1_CHW_V2.csv'
+    csv_file_name = 'EP_PS160_S160_O00_N1_L1_CHW_V2.csv'
     patch_size = (160, 160)
     stride = (160, 160) 
     threshold = (0, -32768)
     majority_black_threshold=(0.01, 0.1)
     batch_size = 24
-    map_size= 100_555_627_776
+    map_size= 1_155_627_776
     extract_percentile=None
     normalize=False
         
