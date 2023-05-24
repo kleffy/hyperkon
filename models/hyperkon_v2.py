@@ -20,7 +20,8 @@ class ResidualBlock2D(nn.Module):
     
     def forward(self, x):
         residual = x
-        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.bn1(self.conv1(x))
+        x = F.relu(x)
         x = self.bn2(self.conv2(x))
         x += self.shortcut(residual)
         x = F.relu(x)
@@ -38,20 +39,20 @@ class HyperKon_2D_3D(nn.Module):
         self.conv2 = nn.Conv3d(512, 512, kernel_size=(3, 1, 1), padding=(1, 0, 0))
         self.bn2 = nn.BatchNorm3d(512)
         self.gap = nn.AdaptiveAvgPool3d(1)
-        # self.projector = nn.Linear(512, embedding_dim)
-        # self.softmax = nn.Linear(embedding_dim, num_classes)
 
         self.projector = nn.Sequential(
             nn.Linear(in_features=512, out_features=512),
             nn.ReLU(inplace=True),
-            nn.Dropout(p=0.65),
+            nn.Dropout(p=0.5),
             nn.Linear(in_features=512, out_features=out_features),
         )
 
     def forward(self, x):
-        #x = x.unsqueeze(dim=2)
+        x = x.unsqueeze(dim=2)
         # Process spatial information
-        x = F.relu(self.bn1(self.conv1(x)))
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = F.relu(x)
         x = x.squeeze(dim=2)
         x = self.res_block1(x)
         x = self.res_block2(x)
@@ -60,14 +61,15 @@ class HyperKon_2D_3D(nn.Module):
 
         # Process spectral information
         x = x.unsqueeze(dim=2)
-        x = F.relu(self.bn2(self.conv2(x)))
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = F.relu(x)
         x = self.gap(x)
         x = torch.flatten(x, start_dim=1)
         x = self.projector(x)
-        # x = self.softmax(x)
         return x
 
-    
+
 if __name__ == '__main__':
     # Example usage
     in_channels = 1

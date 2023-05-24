@@ -40,8 +40,6 @@ class HyperspectralPatchLmdbDataset(Dataset):
         patch_size = (int(key_split[-2]), int(key_split[-1]))
         channels = int(key_split[-4])
 
-        # dtype = np.float16 if key_split[-9] == 'uint16' else np.float32
-
         patch = np.frombuffer(patch, dtype=np.float32).reshape((-1, patch_size[0], patch_size[1]))
         anchor = torch.from_numpy(np.copy(patch)).to(self.device)
 
