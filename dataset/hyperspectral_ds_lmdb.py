@@ -48,6 +48,13 @@ class HyperspectralPatchLmdbDataset(Dataset):
             anchor = normalize_transform(anchor)
         
         anchor = self._normalize_hyperspectral_image(anchor)
+        if self.channels == 3:
+            r = anchor[range(45, 48), :, :].mean(dim=0)
+            g = anchor[range(33, 36), :, :].mean(dim=0)
+            b = anchor[range(23, 26), :, :].mean(dim=0)
+
+            anchor = torch.stack([r, g, b], dim=0)
+
         positive = self.transform(anchor).to(self.device)
         
         return anchor[:self.channels, :, :], positive.squeeze()[:self.channels, :, :]
