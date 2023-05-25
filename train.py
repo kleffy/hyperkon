@@ -87,8 +87,6 @@ def validate(dataloader, model, criterion, epoch, tbwriter, k=1):
         with tqdm(dataloader, unit="batch") as tepoch:
             for i, (vanchor, vpositive) in enumerate(tepoch):
                 tepoch.set_description(f"Validation: Epoch {epoch + 1}")
-                # vanchor = F.normalize(vanchor)
-                # vpositive = F.normalize(vpositive)
 
                 va_output = model(vanchor.unsqueeze(2))
                 vp_output = model(vpositive.unsqueeze(2))
