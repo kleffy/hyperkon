@@ -49,6 +49,7 @@ class HyperspectralPatchLmdbDataset(Dataset):
         
         anchor = self._normalize_hyperspectral_image(anchor)
         if self.channels == 3:
+            #take selected bands mean
             r = anchor[range(45, 48), :, :].mean(dim=0)
             g = anchor[range(33, 36), :, :].mean(dim=0)
             b = anchor[range(23, 26), :, :].mean(dim=0)
