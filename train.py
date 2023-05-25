@@ -19,6 +19,7 @@ from models.resnext_3D import resnext50, resnext101, resnext152
 from models.hyperkon_2D_3D import HyperKon_2D_3D
 from models.squeeze_excitation_v3 import SqueezeExcitation
 
+from info_nce import InfoNCE
 from loss_functions.kon_losses import NTXentLoss
 
 def train(
@@ -258,6 +259,7 @@ if __name__ == "__main__":
     in_channels = config["in_channels"]
     num_epochs = config["num_epochs"]
     batch_size = config["batch_size"]
+    val_batch_size = config["val_batch_size"]
     val_split = config["val_split"]
     out_features = config["out_features"]
     normalize = config["normalize"]
@@ -306,7 +308,7 @@ if __name__ == "__main__":
     
     val_dataloader = DataLoader(
         val_dataset, 
-        batch_size=batch_size, 
+        batch_size=val_batch_size, 
         shuffle=False, 
         num_workers=0, 
         drop_last=True
@@ -339,15 +341,16 @@ if __name__ == "__main__":
         model = HyperKon_2D_3D(in_channels, out_features).to(device)
 
     criterion = NTXentLoss()
+    # criterion = InfoNCE()
     criterion = criterion.to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
 
     print(f'{writer_name_tag}: {csv_file_name.split(".")[0]} Training started successfully...')
-    best_vloss = 1_000_000.0
-    val_loss = 1_000_001.0
+    top_k_accuracy = 0.0
 
     model_name = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_OF{out_features}_{tag}'
-    model_path = os.path.join(experiment_dir, model_name + ".pth")
+    model_dir = os.path.join(experiment_dir, model_name)
+    model_path = os.path.join(model_dir, "best_model.pth")
     start_epoch = 0
 
     if os.path.exists(model_path):
@@ -391,11 +394,19 @@ if __name__ == "__main__":
             writer.add_scalar("Loss/Train", train_loss, epoch + 1)
             writer.add_scalar("Loss/Validation", val_loss, epoch + 1)
 
-        # Save the model
-        if val_loss < best_vloss:
-            best_vloss = val_loss
-            
-            torch.save({'epoch': epoch,'model_state_dict': model.state_dict()}, model_path)
+            # Save the model
+            if top_k_accuracy_val < top_k_accuracy:
+                top_k_accuracy = top_k_accuracy_val
+                
+                torch.save({'epoch': epoch,'model_state_dict': model.state_dict()}, model_path)
+
+                metrics = {
+                            'epoch': epoch, 'train_loss': train_loss, 
+                            'top_k_accuracy_train': top_k_accuracy_train, 
+                            'val_loss': val_loss, 'top_k_accuracy_val': top_k_accuracy_val}
+                
+                with open(os.path.join(model_dir, "best_metrics.json"), "w+") as outfile: 
+                    json.dump(metrics, outfile)
 
     # Close Tensorboard writer
     writer.close()
@@ -403,4 +414,4 @@ if __name__ == "__main__":
     print(
         f'{writer_name_tag}: {csv_file_name.split(".")[0]} Training completed successfully...'
     )
-    
+   
