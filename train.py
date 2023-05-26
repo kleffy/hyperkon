@@ -229,6 +229,12 @@ def compute_top_k_accuracy(dataloader, fextractor, step_num, writer, topk_tag, k
 
     return top_k_accuracy_equal
 
+def ensure_dir(file_path):
+    directory = os.path.dirname(file_path)
+
+    if not os.path.exists(directory):
+        os.makedirs(directory)
+
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
@@ -350,6 +356,7 @@ if __name__ == "__main__":
     model_name = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_OF{out_features}_{tag}'
     model_dir = os.path.join(experiment_dir, model_name)
     model_path = os.path.join(model_dir, "best_model.pth")
+    ensure_dir(model_path)
     start_epoch = 0
 
     if os.path.exists(model_path):
