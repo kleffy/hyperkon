@@ -344,7 +344,8 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
 
     print(f'{writer_name_tag}: {csv_file_name.split(".")[0]} Training started successfully...')
-    top_k_accuracy = 0.0
+    best_vloss = 1_000_000.0
+    val_loss = 1_000_001.0
 
     model_name = f'{experiment_name}_C{in_channels}_{csv_file_name.split(".")[0]}_b{batch_size}_e{num_epochs}_OF{out_features}_{tag}'
     model_dir = os.path.join(experiment_dir, model_name)
@@ -393,8 +394,8 @@ if __name__ == "__main__":
             writer.add_scalar("Loss/Validation", val_loss, epoch + 1)
 
             # Save the model
-            if top_k_accuracy_val < top_k_accuracy:
-                top_k_accuracy = top_k_accuracy_val
+            if val_loss < best_vloss:
+                best_vloss = val_loss
                 
                 torch.save({'epoch': epoch,'model_state_dict': model.state_dict()}, model_path)
 
