@@ -1,10 +1,9 @@
-from osgeo import gdal
+import rasterio
 import os
 import time
 import glob
 import torch
 import numpy as np
-import pandas as pd
 import argparse
 import random
 import json
@@ -13,7 +12,7 @@ import matplotlib.pyplot as plt
 from datetime import datetime
 from torch.utils.data import DataLoader, Dataset
 from kornia import augmentation as K
-
+from rasterio.windows import Window
 
 class HyperspectralPatchDataset(Dataset):
     def __init__(self, l1c_paths, l2a_paths, patch_size, 
@@ -26,7 +25,7 @@ class HyperspectralPatchDataset(Dataset):
         self.transform = self._kornia_augmentation() if transform else None
         self.device = device
         self.normalize = normalize
-        
+
     def __len__(self):
         return min(len(self.l1c_paths), len(self.l2a_paths))
 
@@ -34,24 +33,24 @@ class HyperspectralPatchDataset(Dataset):
         l1c_path = self.l1c_paths[idx]
         l2a_path = self.l2a_paths[idx]
 
-        l1c_src = gdal.Open(l1c_path)
-        l2a_src = gdal.Open(l2a_path)
+        with rasterio.open(l1c_path) as l1c_src:
+            l1c_meta = l1c_src.meta
 
-        l1c_image = l1c_src.ReadAsArray()
-        l2a_image = l2a_src.ReadAsArray()
+        with rasterio.open(l2a_path) as l2a_src:
+            l2a_meta = l2a_src.meta
 
-        _, height, width = l1c_image.shape
+        height, width = l1c_meta['height'], l1c_meta['width']
         
-        # Randomly select the top-left corner for the patch
         while True:
             top = random.randint(0, height - self.patch_size)
             left = random.randint(0, width - self.patch_size)
 
-            # Extract the patches from Level 1C and Level 2A images
-            anchor_patch = l1c_image[:, top:top + self.patch_size, left:left + self.patch_size]
-            positive_patch = l2a_image[:, top:top + self.patch_size, left:left + self.patch_size]
+            with rasterio.open(l1c_path) as l1c_src:
+                anchor_patch = l1c_src.read(window=Window(left, top, self.patch_size, self.patch_size))
 
-            # If the majority of the pixels are non-zero, then we break the loop
+            with rasterio.open(l2a_path) as l2a_src:
+                positive_patch = l2a_src.read(window=Window(left, top, self.patch_size, self.patch_size))
+
             bpc = np.count_nonzero(anchor_patch)
             tpc = anchor_patch.size
             bpr = bpc / tpc
@@ -62,9 +61,8 @@ class HyperspectralPatchDataset(Dataset):
         anchor_patch = self._extract_percentile_range(anchor_patch, 1, 99)
         positive_patch = self._extract_percentile_range(positive_patch, 1, 99)
 
-        # Convert to torch tensors
-        anchor_patch = torch.from_numpy(anchor_patch)
-        positive_patch = torch.from_numpy(positive_patch)
+        anchor_patch = torch.from_numpy(anchor_patch).float().to(self.device)
+        positive_patch = torch.from_numpy(positive_patch).float().to(self.device)
 
         if self.normalize:
             normalize_transform = transforms.Normalize(mean=[0.5] * self.channels, std=[0.5] * self.channels)
@@ -72,11 +70,11 @@ class HyperspectralPatchDataset(Dataset):
             positive_patch = normalize_transform(positive_patch)
 
         if self.transform:
-            anchor_patch = self.transform(anchor_patch).to(self.device)
-            positive_patch = self.transform(positive_patch).to(self.device)
+            anchor_patch = self.transform(anchor_patch)
+            positive_patch = self.transform(positive_patch)
         
         return anchor_patch[:self.channels, :, :], positive_patch.squeeze()[:self.channels, :, :]
-    
+
     def _kornia_augmentation(self):
         aug_list = K.AugmentationSequential(
             K.RandomHorizontalFlip(),
@@ -91,10 +89,8 @@ class HyperspectralPatchDataset(Dataset):
         plo = np.percentile(data, lo, axis=(1, 2), keepdims=True)
         phi = np.percentile(data, hi, axis=(1, 2), keepdims=True)
         data = np.clip(data, plo, phi)
-        # Handle potential divisions by zero or invalid operations
         with np.errstate(divide='ignore', invalid='ignore'):
             data = np.where(phi - plo == 0, 0, (data - plo) / (phi - plo))
-        
         return data
 
 
@@ -165,7 +161,6 @@ if __name__ == '__main__':
     patch_size = config["patch_size"]
     l1c_folder = config["l1c_folder"]
     l2a_folder = config["l2a_folder"]
-    normalize = config["normalize"]
     transform = config["transform"]
 
     l1c_paths = sorted(glob.glob(f"{l1c_folder}/*.TIF"))
@@ -179,21 +174,21 @@ if __name__ == '__main__':
     dataset = HyperspectralPatchDataset(l1c_paths, l2a_paths, patch_size, 
                                             channels, device, normalize, transform)
     
-    dataloader = DataLoader(dataset, batch_size=1, shuffle=False, num_workers=0, drop_last=True)
+    dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0, drop_last=True)
 
     for i, (anchor, positive) in enumerate(dataloader):
         # print(f'Batch {i+1} anchor shape: {anchor.shape}')
         # print(f'Batch {i+1} positive shape: {positive.shape}')
 
-        a_img = extract_rgb(data=anchor.squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
-        p_img = extract_rgb(data=positive.squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+        a_img = extract_rgb(data=anchor[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+        p_img = extract_rgb(data=positive[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
        
         a_img = move_axis(a_img, True)
         p_img = move_axis(p_img, True)
         display_image(a_img, p_img)
 
-        if i == 1:
-            break
+        # if i == 0:
+        #     break
         # Deallocate GPU memory for the current batch
         del anchor
         del positive
