@@ -72,6 +72,10 @@ class HyperspectralPatchDataset(Dataset):
         if self.transform:
             # anchor_patch = self.transform(anchor_patch)
             positive_patch = self.transform(positive_patch)
+
+        # randomly swap anchor and positive
+        if random.random() > 0.5:
+            return positive_patch.squeeze()[:self.channels, :, :], anchor_patch[:self.channels, :, :]
         
         return anchor_patch[:self.channels, :, :], positive_patch.squeeze()[:self.channels, :, :]
 
