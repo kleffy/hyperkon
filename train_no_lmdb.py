@@ -229,7 +229,7 @@ def ensure_dir(file_path):
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
-        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_i_1.json'
+        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_i_3.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')

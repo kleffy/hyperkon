@@ -70,8 +70,12 @@ class HyperspectralPatchDataset(Dataset):
             positive_patch = normalize_transform(positive_patch)
 
         if self.transform:
-            anchor_patch = self.transform(anchor_patch)
+            # anchor_patch = self.transform(anchor_patch)
             positive_patch = self.transform(positive_patch)
+
+        # randomly swap anchor and positive
+        if random.random() > 0.5:
+            return positive_patch.squeeze()[:self.channels, :, :], anchor_patch[:self.channels, :, :]
         
         return anchor_patch[:self.channels, :, :], positive_patch.squeeze()[:self.channels, :, :]
 
@@ -79,8 +83,8 @@ class HyperspectralPatchDataset(Dataset):
         aug_list = K.AugmentationSequential(
             K.RandomHorizontalFlip(),
             K.RandomVerticalFlip(),
-            K.RandomGaussianNoise(mean=0.0, std=0.05, p=0.8),
-            K.RandomGaussianBlur(kernel_size=(9,9), sigma=(0.1, 2.0), p=0.8),
+            K.RandomGaussianNoise(mean=0.0, std=0.05, p=0.5),
+            K.RandomGaussianBlur(kernel_size=(9,9), sigma=(0.1, 2.0), p=0.5),
             same_on_batch=True,
         )
         return aug_list
@@ -97,7 +101,7 @@ class HyperspectralPatchDataset(Dataset):
 if __name__ == '__main__':
     # Parse the arguments
     if 1:
-        config_path = r'config/config_i_1.json'
+        config_path = r'config/config_i_2.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
@@ -187,8 +191,8 @@ if __name__ == '__main__':
         p_img = move_axis(p_img, True)
         display_image(a_img, p_img)
 
-        # if i == 0:
-        #     break
+        if i == 5:
+            break
         # Deallocate GPU memory for the current batch
         del anchor
         del positive
