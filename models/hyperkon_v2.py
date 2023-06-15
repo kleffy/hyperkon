@@ -86,14 +86,14 @@ class ModifiedResidualBlock2D(nn.Module):
         return x
 
 
-class HyperKon_2D_3D(nn.Module):
+class HyperKon_V2(nn.Module):
     def __init__(self, in_channels, out_features):
-        super(HyperKon_2D_3D, self).__init__()
+        super(HyperKon_V2, self).__init__()
         self.conv1 = nn.Conv3d(in_channels, 64, kernel_size=(1, 3, 3), padding=(0, 1, 1))
         self.bn1 = nn.BatchNorm3d(64)
-        self.res_block1 = ModifiedResidualBlock2D(64, 128)
-        self.res_block2 = ModifiedResidualBlock2D(128, 256)
-        self.res_block3 = ModifiedResidualBlock2D(256, 256)
+        self.res_block1 = ModifiedResidualBlock2D(64, 64)
+        self.res_block2 = ModifiedResidualBlock2D(64, 128)
+        self.res_block3 = ModifiedResidualBlock2D(128, 256)
         self.res_block4 = ModifiedResidualBlock2D(256, 512)
         self.conv2 = nn.Conv3d(512, 512, kernel_size=(3, 1, 1), padding=(1, 0, 0))
         self.bn2 = nn.BatchNorm3d(512)
@@ -107,7 +107,7 @@ class HyperKon_2D_3D(nn.Module):
         )
 
     def forward(self, x):
-        x = x.unsqueeze(dim=2)
+        # x = x.unsqueeze(dim=2)
         x = F.relu(self.bn1(self.conv1(x)))
         x = x.squeeze(dim=2)
         x = self.res_block1(x)
@@ -129,8 +129,8 @@ if __name__ == '__main__':
     num_classes = 128
     embedding_dim = 256
     batch_size = 20
-    m1 = HyperKon_2D_3D(in_channels, num_classes)
-    m2 = HyperKon_2D_3D(in_channels2, num_classes)
+    m1 = HyperKon_V2(in_channels, num_classes)
+    m2 = HyperKon_V2(in_channels2, num_classes)
 
     sample_input = torch.randn(batch_size, in_channels, 32, 32)
     sample_input2 = torch.randn(batch_size, in_channels2, 32, 32)

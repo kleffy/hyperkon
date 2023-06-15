@@ -10,6 +10,8 @@ docker_stderror
 config/config_1.json
 weka_logs/
 lightning_logs/
+experiments2/
+logs2/
 
 # Created by https://www.toptal.com/developers/gitignore/api/python,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=python,visualstudiocode
