@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models.resnext_3D import resnext50, resnext101, resnext152
 from models.hyperkon_2D_3D import HyperKon_2D_3D
 from models.squeeze_excitation_v3 import SqueezeExcitation
+from models.hyperkon_v2 import HyperKon_V2
 from models.hyperkon_v3 import HyperKon_V3
 
 from info_nce import InfoNCE
@@ -331,13 +332,13 @@ if __name__ == "__main__":
         print("Initialised HyperKon_2D_3D!")
         #embedding_dim = 512
         model = HyperKon_2D_3D(channels, out_features).to(device)
+    elif config.get("resnext") == 2:
+        print("Initialised HyperKon_V2!")
+        model = HyperKon_V2(channels, out_features).to(device)
     else:
         print("Initialised HyperKon_V3!")
-        transformer_nhead=1
-        transformer_num_layers=1
-        cbam_channels=224
-        conv3d_out_channels=256
-        model = HyperKon_V3(channels, transformer_nhead, transformer_num_layers, cbam_channels, conv3d_out_channels).to(device)
+    
+        model = HyperKon_V3(channels, out_features).to(device)
 
     # model = model.half()
     criterion = NTXentLoss()

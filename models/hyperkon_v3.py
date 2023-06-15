@@ -1,17 +1,16 @@
 import torch
 import torch.nn as nn
-from torchvision.models import resnet50
-from torch.nn import TransformerEncoder, TransformerEncoderLayer
+import torch.nn.functional as F
 
 class ChannelAttention(nn.Module):
     def __init__(self, in_planes, ratio=16):
         super(ChannelAttention, self).__init__()
-        self.avg_pool = nn.AdaptiveAvgPool2d(1)
-        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        self.avg_pool = nn.AdaptiveAvgPool3d(1)
+        self.max_pool = nn.AdaptiveMaxPool3d(1)
 
-        self.fc1 = nn.Conv2d(in_planes, in_planes // ratio, 1, bias=False)
+        self.fc1 = nn.Conv3d(in_planes, in_planes // ratio, 1, bias=False)
         self.relu1 = nn.ReLU()
-        self.fc2 = nn.Conv2d(in_planes // ratio, in_planes, 1, bias=False)
+        self.fc2 = nn.Conv3d(in_planes // ratio, in_planes, 1, bias=False)
 
         self.sigmoid = nn.Sigmoid()
 
@@ -21,7 +20,6 @@ class ChannelAttention(nn.Module):
         out = avg_out + max_out
         return self.sigmoid(out)
 
-
 class SpatialAttention(nn.Module):
     def __init__(self, kernel_size=7):
         super(SpatialAttention, self).__init__()
@@ -29,7 +27,7 @@ class SpatialAttention(nn.Module):
         assert kernel_size in (3, 7), 'kernel size must be 3 or 7'
         padding = 3 if kernel_size == 7 else 1
 
-        self.conv1 = nn.Conv2d(2, 1, kernel_size, padding=padding, bias=False)
+        self.conv1 = nn.Conv3d(2, 1, kernel_size, padding=padding, bias=False)
         self.sigmoid = nn.Sigmoid()
 
     def forward(self, x):
@@ -40,9 +38,9 @@ class SpatialAttention(nn.Module):
         return self.sigmoid(x)
 
 
-class ConvBlockAttentionModule(nn.Module):
+class CBAM(nn.Module):
     def __init__(self, in_planes, ratio=16, kernel_size=7):
-        super(ConvBlockAttentionModule, self).__init__()
+        super(CBAM, self).__init__()
         self.ca = ChannelAttention(in_planes, ratio)
         self.sa = SpatialAttention(kernel_size)
 
@@ -52,41 +50,30 @@ class ConvBlockAttentionModule(nn.Module):
         return x
 
 
-class DepthwiseSeparableConv3D(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1):
-        super(DepthwiseSeparableConv3D, self).__init__()
-        self.depthwise = nn.Conv3d(in_channels, in_channels, kernel_size, stride, padding, groups=in_channels)
+class DepthwiseSeparableConv3d(nn.Module):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1):
+        super(DepthwiseSeparableConv3d, self).__init__()
+        self.depthwise = nn.Conv3d(in_channels, in_channels, kernel_size, stride, padding, dilation, groups=in_channels)
         self.pointwise = nn.Conv3d(in_channels, out_channels, 1)
 
     def forward(self, x):
-        x = x.unsqueeze(2)
         x = self.depthwise(x)
         x = self.pointwise(x)
         return x
 
-class SpectralSpatialTransformerNetwork(nn.Module):
-    def __init__(self, in_channels, nhead, num_layers):
-        super(SpectralSpatialTransformerNetwork, self).__init__()
-        self.transformer = TransformerEncoder(TransformerEncoderLayer(d_model=in_channels, nhead=nhead), num_layers=num_layers)
-
-    def forward(self, x):
-        x = x.view(x.size(0), x.size(1), -1).permute(2, 0, 1)  # reshape and transpose for transformer
-        x = self.transformer(x)
-        x = x.permute(1, 2, 0).view(x.size(1), x.size(2), int(x.size(0)**0.5), int(x.size(0)**0.5))  # transpose and reshape back
-        return x
 
 class HyperKon_V3(nn.Module):
-    def __init__(self, in_channels, transformer_nhead, transformer_num_layers, cbam_channels, conv3d_out_channels):
+    def __init__(self, in_channels, out_channels):
         super(HyperKon_V3, self).__init__()
-        # self.sstn = SpectralSpatialTransformerNetwork(in_channels, transformer_nhead, transformer_num_layers)
-        self.cbam = ConvBlockAttentionModule(cbam_channels)
-        self.conv3d = DepthwiseSeparableConv3D(cbam_channels, conv3d_out_channels)
-        self.fc = nn.Linear(6553600, conv3d_out_channels)
+        self.cbam = CBAM(in_channels)
+        self.conv = DepthwiseSeparableConv3d(in_channels, out_channels, 3, padding=1)
+        self.fc = nn.Linear(out_channels, out_channels)
 
     def forward(self, x):
-        # x = self.sstn(x)
-        x = self.cbam(x.squeeze(2))  # add an extra dimension for 3D convolution
-        x = self.conv3d(x)
-        x = x.view(x.size(0), -1)  # flatten
+        x = self.cbam(x)
+        x = self.conv(x)
+        x = F.adaptive_avg_pool3d(x, (1, 1, 1)) # Global Average Pooling
+        x = x.view(x.size(0), -1) # Flatten
         x = self.fc(x)
         return x
+

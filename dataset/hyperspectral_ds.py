@@ -1,69 +1,68 @@
 import rasterio
 import os
-import argparse
 import time
 import glob
 import torch
 import numpy as np
-import pandas as pd
+import argparse
 import random
 import json
 import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
-from tqdm import tqdm
 from datetime import datetime
 from torch.utils.data import DataLoader, Dataset
 from kornia import augmentation as K
 from rasterio.windows import Window
 
 class HyperspectralPatchDataset(Dataset):
-    def __init__(self, root_dir, is_train, patch_size, stride, channels=224, 
-                device=torch.device('cpu'), normalize=False, transform=False, csv_file="patch_data.csv", weka_mnt=None):
-        self.root_dir = root_dir
-        self.weka_mnt = weka_mnt  
-        self.file_folder = os.path.join(self.root_dir, 'test_train' if is_train else 'test_val')
-        self.csv_file = os.path.join(self.file_folder, 'train.csv' if is_train else 'val.csv')
-
-        self.l1c_paths = sorted(glob.glob(f"{self.file_folder}/L1C/*.TIF"))
-        self.l2a_paths = sorted(glob.glob(f"{self.file_folder}/L2A/*.TIF"))
-
+    def __init__(self, l1c_paths, l2a_paths, patch_size, 
+                 channels=224, device=torch.device('cpu'),
+                 normalize=False, transform=False):
+        self.l1c_paths = l1c_paths
+        self.l2a_paths = l2a_paths
         self.patch_size = patch_size
-        self.stride = stride
         self.channels = channels
         self.transform = self._kornia_augmentation() if transform else None
         self.device = device
         self.normalize = normalize
-        # print(self.csv_file)
-        if os.path.isfile(self.csv_file):
-            self.patch_info = pd.read_csv(self.csv_file)
-        else:
-            self.patch_info = self._generate_patch_info()
-            self.patch_info.to_csv(self.csv_file, index=False)
 
     def __len__(self):
-        return len(self.patch_info)
+        return min(len(self.l1c_paths), len(self.l2a_paths))
 
     def __getitem__(self, idx):
-        info = self.patch_info.iloc[idx]
-        l1c_path = info['l1c_path']
-        l2a_path = info['l2a_path']
-        top, left = info['top'], info['left']
-        
-        if self.weka_mnt:
-            l1c_path = os.path.join(self.weka_mnt, l1c_path[1:])
-            l2a_path = os.path.join(self.weka_mnt, l2a_path[1:])
+        l1c_path = self.l1c_paths[idx]
+        l2a_path = self.l2a_paths[idx]
 
         with rasterio.open(l1c_path) as l1c_src:
-            anchor_patch = l1c_src.read(window=Window(left, top, self.patch_size, self.patch_size))
+            l1c_meta = l1c_src.meta
 
         with rasterio.open(l2a_path) as l2a_src:
-            positive_patch = l2a_src.read(window=Window(left, top, self.patch_size, self.patch_size))
+            l2a_meta = l2a_src.meta
+
+        height, width = l1c_meta['height'], l1c_meta['width']
+        
+        while True:
+            top = random.randint(0, height - self.patch_size)
+            left = random.randint(0, width - self.patch_size)
+
+            with rasterio.open(l1c_path) as l1c_src:
+                anchor_patch = l1c_src.read(window=Window(left, top, self.patch_size, self.patch_size))
+
+            with rasterio.open(l2a_path) as l2a_src:
+                positive_patch = l2a_src.read(window=Window(left, top, self.patch_size, self.patch_size))
+
+            bpc = np.count_nonzero(anchor_patch)
+            tpc = anchor_patch.size
+            bpr = bpc / tpc
+
+            if bpr > 0.99:
+                break
 
         anchor_patch = self._extract_percentile_range(anchor_patch, 1, 99)
         positive_patch = self._extract_percentile_range(positive_patch, 1, 99)
 
-        anchor_patch = torch.from_numpy(anchor_patch).float()#.to(self.device)
-        positive_patch = torch.from_numpy(positive_patch).float()#.to(self.device)
+        anchor_patch = torch.from_numpy(anchor_patch).float().to(self.device)
+        positive_patch = torch.from_numpy(positive_patch).float().to(self.device)
 
         if self.normalize:
             normalize_transform = transforms.Normalize(mean=[0.5] * self.channels, std=[0.5] * self.channels)
@@ -71,40 +70,14 @@ class HyperspectralPatchDataset(Dataset):
             positive_patch = normalize_transform(positive_patch)
 
         if self.transform:
+            # anchor_patch = self.transform(anchor_patch)
             positive_patch = self.transform(positive_patch)
 
+        # randomly swap anchor and positive
         if random.random() > 0.5:
             return positive_patch.squeeze()[:self.channels, :, :], anchor_patch[:self.channels, :, :]
         
         return anchor_patch[:self.channels, :, :], positive_patch.squeeze()[:self.channels, :, :]
-
-    def _generate_patch_info(self):
-        patch_info = []
-
-        num_images = min(len(self.l1c_paths), len(self.l2a_paths))
-        for idx in tqdm(range(num_images), desc='Generating patch info'):
-            l1c_path = self.l1c_paths[idx]
-            l2a_path = self.l2a_paths[idx]
-
-            with rasterio.open(l1c_path) as l1c_src:
-                l1c_image = l1c_src.read()
-                l1c_meta = l1c_src.meta
-
-            height, width = l1c_meta['height'], l1c_meta['width']
-
-            for top in range(0, height - self.patch_size + 1, self.stride):
-                for left in range(0, width - self.patch_size + 1, self.stride):
-
-                    anchor_patch = l1c_image[:, top:top+self.patch_size, left:left+self.patch_size]
-                    bpc = np.count_nonzero(anchor_patch)
-                    tpc = anchor_patch.size
-                    bpr = bpc / tpc
-
-                    if bpr > 0.99:
-                        patch_info.append({'l1c_path': l1c_path, 'l2a_path': l2a_path, 'top': top, 'left': left})
-
-        return pd.DataFrame(patch_info)
-
 
     def _kornia_augmentation(self):
         aug_list = K.AugmentationSequential(
@@ -125,11 +98,10 @@ class HyperspectralPatchDataset(Dataset):
         return data
 
 
-
 if __name__ == '__main__':
     # Parse the arguments
     if 1:
-        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_i_8.json'
+        config_path = r'config/config_i_2.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
@@ -191,40 +163,35 @@ if __name__ == '__main__':
     channels = config["in_channels"]
     normalize = config["normalize"]
     patch_size = config["patch_size"]
-    root_dir = config["root_dir"]
+    l1c_folder = config["l1c_folder_val"]
+    l2a_folder = config["l2a_folder_val"]
     transform = config["transform"]
-    stride = config["stride"]
-    weka_mnt = config["weka_mnt"]
-    
-    if weka_mnt:
-        log_dir = os.path.join(weka_mnt, log_dir[1:])
-        root_dir = os.path.join(weka_mnt, root_dir[1:])
+
+    l1c_paths = sorted(glob.glob(f"{l1c_folder}/*.TIF"))
+    l2a_paths = sorted(glob.glob(f"{l2a_folder}/*.TIF"))
 
     start = time.time()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
     
-    dataset = HyperspectralPatchDataset(root_dir=root_dir, is_train=False, patch_size=patch_size, 
-                                        stride=stride, channels=224, 
-                                    device=torch.device('cpu'), normalize=False, 
-                                    transform=False, weka_mnt=weka_mnt)
-
+    dataset = HyperspectralPatchDataset(l1c_paths, l2a_paths, patch_size, 
+                                            channels, device, normalize, transform)
     
     dataloader = DataLoader(dataset, batch_size=2, shuffle=False, num_workers=0, drop_last=True)
 
     for i, (anchor, positive) in enumerate(dataloader):
-        print(f'Batch {i+1} anchor shape: {anchor.shape}')
-        print(f'Batch {i+1} positive shape: {positive.shape}')
+        # print(f'Batch {i+1} anchor shape: {anchor.shape}')
+        # print(f'Batch {i+1} positive shape: {positive.shape}')
 
-        # a_img = extract_rgb(data=anchor[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
-        # p_img = extract_rgb(data=positive[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+        a_img = extract_rgb(data=anchor[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
+        p_img = extract_rgb(data=positive[0].squeeze().cpu().numpy(), r_range=(46, 48), g_range=(23, 25), b_range=(8, 10))
        
-        # a_img = move_axis(a_img, True)
-        # p_img = move_axis(p_img, True)
-        # display_image(a_img, p_img)
+        a_img = move_axis(a_img, True)
+        p_img = move_axis(p_img, True)
+        display_image(a_img, p_img)
 
-        if i == 0:
+        if i == 5:
             break
         # Deallocate GPU memory for the current batch
         del anchor
@@ -234,4 +201,4 @@ if __name__ == '__main__':
 
     print(f'Elapsed time: {end - start}')
     
-    # Use this dataset class for HyperKon if not using LMDB... gets all possible patches per image
+    # Use this dataset class for HyperKon if not using LMDB... gets one random patch per image
