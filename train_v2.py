@@ -1,5 +1,5 @@
 
-from dataset.hyperspectral_ds_v2 import HyperspectralPatchDataset
+from dataset.hyperspectral_ds_lmdb2 import HyperspectralPatchLMDBDataset
 import os
 import glob
 import numpy as np
@@ -15,6 +15,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models.resnext_3D import resnext50, resnext101, resnext152
 from models.hyperkon_2D_3D import HyperKon_2D_3D
 from models.squeeze_excitation_v3 import SqueezeExcitation
+from models.hyperkon_v3 import HyperKon_V3
 
 from info_nce import InfoNCE
 from loss_functions.kon_losses import NTXentLoss
@@ -38,8 +39,8 @@ def train(
     with tqdm(dataloader, unit="batch") as tepoch:
         for i, (anchor, positive) in enumerate(tepoch):
             tepoch.set_description(f"Training: Epoch {epoch + 1}")
-            anchor = anchor.to(device)
-            positive = positive.to(device)
+            anchor = anchor.float().to(device)
+            positive = positive.float().to(device)
 
             optimizer.zero_grad()
 
@@ -86,8 +87,8 @@ def validate(dataloader, model, criterion, epoch, tbwriter, k=1):
         with tqdm(dataloader, unit="batch") as tepoch:
             for i, (vanchor, vpositive) in enumerate(tepoch):
                 tepoch.set_description(f"Validation: Epoch {epoch + 1}")
-                anchor = anchor.to(device)
-                positive = positive.to(device)
+                vanchor = vanchor.float().to(device)
+                vpositive = vpositive.float().to(device)
 
                 va_output = model(vanchor.unsqueeze(2))
                 vp_output = model(vpositive.unsqueeze(2))
@@ -204,6 +205,9 @@ def compute_top_k_accuracy(dataloader, fextractor, step_num, writer, topk_tag, k
     afeatures, pfeatures = [], []
     with torch.no_grad():
         for anchor, positive in dataloader:
+            anchor = anchor.float().to(device)
+            positive = positive.float().to(device)
+            
             afeatures.append(fextractor(anchor.unsqueeze(2)).detach().cpu())
             pfeatures.append(fextractor(positive.unsqueeze(2)).detach().cpu())
 
@@ -233,7 +237,7 @@ def ensure_dir(file_path):
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
-        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_i_8.json'
+        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/l1_l2/config_t.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
@@ -270,28 +274,20 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # Instantiate the dataset and the dataloaders
-    train_dataset = HyperspectralPatchDataset(
+    train_dataset = HyperspectralPatchLMDBDataset(
         root_dir=root_dir,
         is_train=True,
-        patch_size=patch_size,
-        stride=stride,
         channels=channels,
-        device=device,
-        normalize=normalize,
         transform=transform,
-        weka_mnt=weka_mnt,
+        normalize=normalize,
     )
 
-    val_dataset = HyperspectralPatchDataset(
+    val_dataset = HyperspectralPatchLMDBDataset(
         root_dir=root_dir,
         is_train=False,
-        patch_size=patch_size,
-        stride=stride,
         channels=channels,
-        device=device,
-        normalize=normalize,
         transform=transform,
-        weka_mnt=weka_mnt,
+        normalize=normalize,
     )
 
     train_dataloader = DataLoader(
@@ -331,11 +327,19 @@ if __name__ == "__main__":
         print("Initialised SqueezeExcitation!")
         embedding_dim = 512
         model = SqueezeExcitation(channels, embedding_dim, out_features).to(device)
-    else:
+    elif config.get("resnext") == 1:
         print("Initialised HyperKon_2D_3D!")
         #embedding_dim = 512
         model = HyperKon_2D_3D(channels, out_features).to(device)
+    else:
+        print("Initialised HyperKon_V3!")
+        transformer_nhead=1
+        transformer_num_layers=1
+        cbam_channels=224
+        conv3d_out_channels=256
+        model = HyperKon_V3(channels, transformer_nhead, transformer_num_layers, cbam_channels, conv3d_out_channels).to(device)
 
+    # model = model.half()
     criterion = NTXentLoss()
     # criterion = InfoNCE()
     criterion = criterion.to(device)
@@ -373,7 +377,7 @@ if __name__ == "__main__":
             dataset_obj=train_dataset,
         )
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+        # print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
         
         if (epoch + 1) % config["val_frequency"] == 0:
             val_loss, top_k_accuracy_val = validate(
