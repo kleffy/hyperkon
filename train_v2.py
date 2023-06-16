@@ -1,5 +1,5 @@
 
-from dataset.hyperspectral_ds_lmdb2 import HyperspectralPatchLMDBDataset
+from dataset.hyperspectral_ds_lmdb3 import HyperspectralPatchLMDBDataset
 import os
 import glob
 import numpy as np
@@ -265,6 +265,7 @@ if __name__ == "__main__":
     learning_rate = config["learning_rate"]
     stride = config["stride"]
     weka_mnt = config["weka_mnt"]
+    load_only_L1 = config.get("load_only_L1")
     
     if weka_mnt:
         log_dir = os.path.join(weka_mnt, log_dir[1:])
@@ -281,6 +282,7 @@ if __name__ == "__main__":
         channels=channels,
         transform=transform,
         normalize=normalize,
+        load_only_L1=load_only_L1,
     )
 
     val_dataset = HyperspectralPatchLMDBDataset(
@@ -289,6 +291,7 @@ if __name__ == "__main__":
         channels=channels,
         transform=transform,
         normalize=normalize,
+        load_only_L1=load_only_L1,
     )
 
     train_dataloader = DataLoader(

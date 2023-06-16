@@ -1,3 +1,4 @@
+# this has the ability to load only L1 images and then apply the transforms to use them as positive patches
 import lmdb
 import torch
 from torch.utils.data import Dataset
@@ -21,7 +22,7 @@ import pickle
 
 class HyperspectralPatchLMDBDataset(Dataset):
     def __init__(self, root_dir, is_train=False, channels=224, transform=None, 
-                 normalize=False):
+                 normalize=False, load_only_L1=False):
         self.root_dir = root_dir
         self.file_folder = os.path.join(self.root_dir, 'test_train' if is_train else 'test_val')
         
@@ -36,6 +37,7 @@ class HyperspectralPatchLMDBDataset(Dataset):
         self.channels = channels
         self.transform = self._kornia_augmentation() if transform else None
         self.normalize = normalize
+        self.load_only_L1 = load_only_L1
 
     def __len__(self):
         return self.length
@@ -43,7 +45,10 @@ class HyperspectralPatchLMDBDataset(Dataset):
     def __getitem__(self, idx):
         with self.env.begin(write=False) as txn:
             anchor_patch = pickle.loads(txn.get(f'anchor_{idx}'.encode()))
-            positive_patch = pickle.loads(txn.get(f'positive_{idx}'.encode()))
+            if self.load_only_L1:
+                positive_patch = anchor_patch.copy()
+            else:
+                positive_patch = pickle.loads(txn.get(f'positive_{idx}'.encode()))
 
         anchor_patch = torch.from_numpy(anchor_patch)
         positive_patch = torch.from_numpy(positive_patch)
