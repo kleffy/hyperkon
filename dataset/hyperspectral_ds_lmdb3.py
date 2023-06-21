@@ -57,8 +57,8 @@ class HyperspectralPatchLMDBDataset(Dataset):
             positive_patch = self.transform(positive_patch.float())
             # convert to back to float16
             positive_patch = positive_patch.squeeze().half()
-
-        return anchor_patch, positive_patch
+            
+        return anchor_patch[:self.channels, :, :], positive_patch.squeeze()[:self.channels, :, :]
 
     def _kornia_augmentation(self):
         aug_list = K.AugmentationSequential(
