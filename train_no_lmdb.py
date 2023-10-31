@@ -1,5 +1,6 @@
 
-from dataset.hyperspectral_ds_v2 import HyperspectralPatchDataset
+from dataset.hyperspectral_ds_v2_1 import HyperspectralPatchDataset
+
 import os
 import glob
 import numpy as np
@@ -13,8 +14,12 @@ from matplotlib import pyplot as plt
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 from models.resnext_3D import resnext50, resnext101, resnext152
-from models.hyperkon_2D_3D import HyperKon_2D_3D
-from models.squeeze_excitation_v3 import SqueezeExcitation
+
+from models.hyperkon_2D_3D_1 import HyperKon_2D_3D
+from models.squeeze_excitation_v3_1 import SqueezeExcitation
+from models.hyperkon_v2_1 import HyperKon_V2
+from models.hyperkon_v3_1 import HyperKon_V3
+
 
 from info_nce import InfoNCE
 from loss_functions.kon_losses import NTXentLoss
@@ -30,6 +35,8 @@ def train(
     add_tb_images=False,
     compute_top_k=True,
     dataset_obj=None,
+    test_dataloader=None,
+
 ):
     model.train()
     running_loss = 0.0
@@ -38,8 +45,9 @@ def train(
     with tqdm(dataloader, unit="batch") as tepoch:
         for i, (anchor, positive) in enumerate(tepoch):
             tepoch.set_description(f"Training: Epoch {epoch + 1}")
-            anchor = anchor.to(device)
-            positive = positive.to(device)
+
+            anchor = anchor.float().to(device)
+            positive = positive.float().to(device)
 
             optimizer.zero_grad()
 
@@ -55,29 +63,30 @@ def train(
             optimizer.step()
 
             running_loss += loss.item()
-            
-            if ((epoch + 1) % config["val_frequency"] == 0) and do_logging:
-                if add_tb_images:
-                    tb_add_images(anchor, positive, epoch+1, writer, dataset_obj)
 
-                if compute_top_k and ((epoch + 1) % config["val_frequency"] == 0):
-                    top_k_accuracy_train = compute_top_k_accuracy(
-                        dataloader=dataloader,
-                        fextractor=model,
-                        step_num=epoch+1,
-                        writer=writer,
-                        topk_tag="Top-k Accuracy/Train",
-                        k=k
-                    )
+        if ((epoch + 1) % config["val_frequency"] == 0) and do_logging:
+            if add_tb_images:
+                tb_add_images(anchor, positive, epoch+1, writer, dataset_obj)
 
-                do_logging = False
+            if compute_top_k and ((epoch + 1) % config["val_frequency"] == 0):
+                top_k_accuracy_train = compute_top_k_accuracy(
+                    dataloader=dataloader if test_dataloader is None else test_dataloader,
+                    fextractor=model,
+                    step_num=epoch+1,
+                    writer=writer,
+                    topk_tag="Top-k Accuracy/Train",
+                    k=k
+                )
 
-            tepoch.set_postfix(loss=loss.item())
+            do_logging = False
+
+        tepoch.set_postfix(loss=loss.item())
 
     return running_loss / (i + 1), top_k_accuracy_train
 
 
-def validate(dataloader, model, criterion, epoch, tbwriter, k=1):
+def validate(dataloader, model, criterion, epoch, tbwriter, k=1, test_dataloader=None):
+
     # model.eval()
     val_loss = 0.0
     top_k_accuracy_val = 0.0
@@ -86,8 +95,9 @@ def validate(dataloader, model, criterion, epoch, tbwriter, k=1):
         with tqdm(dataloader, unit="batch") as tepoch:
             for i, (vanchor, vpositive) in enumerate(tepoch):
                 tepoch.set_description(f"Validation: Epoch {epoch + 1}")
-                anchor = anchor.to(device)
-                positive = positive.to(device)
+
+                vanchor = vanchor.float().to(device)
+                vpositive = vpositive.float().to(device)
 
                 va_output = model(vanchor.unsqueeze(2))
                 vp_output = model(vpositive.unsqueeze(2))
@@ -101,19 +111,19 @@ def validate(dataloader, model, criterion, epoch, tbwriter, k=1):
                 # Print statistics
                 val_loss += vloss.item()
 
-                if ((epoch + 1) % config["val_frequency"] == 0) and do_logging:
-                    top_k_accuracy_val = compute_top_k_accuracy(
-                        dataloader=dataloader,
-                        fextractor=model,
-                        step_num=epoch+1,
-                        writer=tbwriter,
-                        topk_tag="Top-k Accuracy/Validation",
-                        k=k
-                    )
+            if ((epoch + 1) % config["val_frequency"] == 0) and do_logging:
+                top_k_accuracy_val = compute_top_k_accuracy(
+                    dataloader=dataloader if test_dataloader is None else test_dataloader,
+                    fextractor=model,
+                    step_num=epoch+1,
+                    writer=tbwriter,
+                    topk_tag="Top-k Accuracy/Validation",
+                    k=k
+                )
 
-                    do_logging = False
+                do_logging = False
 
-                tepoch.set_postfix(loss=val_loss)
+            tepoch.set_postfix(loss=val_loss)
 
     return val_loss / (i + 1), top_k_accuracy_val
 
@@ -185,9 +195,6 @@ def tb_add_images(anchor, positives, step_num, writer, dataset_obj):
     # Add the grid of images to TensorBoard
     writer.add_image("tripplet images", grid, step_num)
 
-    # for item in (("1. Anchor", a), ("2. Positive", p), ("3. Negative", n)):
-    #     writer.add_histogram(f"{item[0]} Histogram", item[1], step_num)
-
 
 def cosine_similarity(x, y):
     return torch.nn.functional.cosine_similarity(x, y)
@@ -204,6 +211,10 @@ def compute_top_k_accuracy(dataloader, fextractor, step_num, writer, topk_tag, k
     afeatures, pfeatures = [], []
     with torch.no_grad():
         for anchor, positive in dataloader:
+
+            anchor = anchor.float().to(device)
+            positive = positive.float().to(device)
+
             afeatures.append(fextractor(anchor.unsqueeze(2)).detach().cpu())
             pfeatures.append(fextractor(positive.unsqueeze(2)).detach().cpu())
 
@@ -233,7 +244,7 @@ def ensure_dir(file_path):
 if __name__ == "__main__":
     # Parse the arguments
     if 1:
-        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/config_i_8.json'
+        config_path = r'/vol/research/RobotFarming/Projects/hyperkon/config/no_lmdb/config_test.json'
     else:
         config_path = None
     parser = argparse.ArgumentParser(description='HyperKon Training')
@@ -260,6 +271,9 @@ if __name__ == "__main__":
     learning_rate = config["learning_rate"]
     stride = config["stride"]
     weka_mnt = config["weka_mnt"]
+    load_only_L1 = config.get("load_only_L1")
+    is_topk_test = config.get("is_topk_test")
+    test_batch_size = config.get("test_batch_size")
     
     if weka_mnt:
         log_dir = os.path.join(weka_mnt, log_dir[1:])
@@ -279,7 +293,9 @@ if __name__ == "__main__":
         device=device,
         normalize=normalize,
         transform=transform,
-        weka_mnt=weka_mnt,
+        weka_mnt = weka_mnt,
+        load_only_L1 = load_only_L1,
+        is_topk_test = is_topk_test
     )
 
     val_dataset = HyperspectralPatchDataset(
@@ -292,6 +308,8 @@ if __name__ == "__main__":
         normalize=normalize,
         transform=transform,
         weka_mnt=weka_mnt,
+        load_only_L1 = load_only_L1,
+        is_topk_test = is_topk_test
     )
 
     train_dataloader = DataLoader(
@@ -300,6 +318,8 @@ if __name__ == "__main__":
         shuffle=True,
         num_workers=10,
         drop_last=True,
+        pin_memory=True, 
+        persistent_workers=True
     )
     
     val_dataloader = DataLoader(
@@ -307,9 +327,38 @@ if __name__ == "__main__":
         batch_size=val_batch_size, 
         shuffle=False, 
         num_workers=5, 
-        drop_last=True
+        drop_last=True,
+        pin_memory=True, 
+        persistent_workers=True
     ) 
-    
+
+    if is_topk_test:
+        test_dataset = HyperspectralPatchDataset(
+            root_dir=root_dir,
+            is_train=False,
+            patch_size=patch_size,
+            stride=stride,
+            channels=channels,
+            device=device,
+            normalize=normalize,
+            transform=transform,
+            weka_mnt=weka_mnt,
+            load_only_L1 = load_only_L1,
+            is_topk_test = is_topk_test
+        )
+
+        test_dataloader = DataLoader(
+            test_dataset,
+            batch_size=test_batch_size,
+            shuffle=False,
+            num_workers=5,
+            drop_last=True,
+            pin_memory=True, 
+            persistent_workers=True
+        )
+    else:
+        test_dataloader = None
+   
     
     torch.cuda.empty_cache()
     overall_vloss = 1_000_000.0
@@ -331,15 +380,24 @@ if __name__ == "__main__":
         print("Initialised SqueezeExcitation!")
         embedding_dim = 512
         model = SqueezeExcitation(channels, embedding_dim, out_features).to(device)
-    else:
+    elif config.get("resnext") == 1:
         print("Initialised HyperKon_2D_3D!")
         #embedding_dim = 512
         model = HyperKon_2D_3D(channels, out_features).to(device)
+    elif config.get("resnext") == 2:
+        print("Initialised HyperKon_V2!")
+        model = HyperKon_V2(channels, out_features).to(device)
+    else:
+        print("Initialised HyperKon_V3!")
+    
+        model = HyperKon_V3(channels, out_features).to(device)
 
     criterion = NTXentLoss()
     # criterion = InfoNCE()
     criterion = criterion.to(device)
     optimizer = torch.optim.Adam(params=model.parameters(), lr=learning_rate)
+
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=num_epochs, eta_min=1e-6)
 
     print(f'{writer_name_tag}: Training started successfully...')
     best_vloss = 1_000_000.0
@@ -349,7 +407,11 @@ if __name__ == "__main__":
     model_dir = os.path.join(experiment_dir, model_name)
     model_path = os.path.join(model_dir, "best_model.pth")
     ensure_dir(model_path)
-    start_epoch = 0
+
+    with open(os.path.join(model_dir, args.config.split('/')[-1]), "w+") as outfile: 
+        json.dump(config, outfile, indent=4)
+
+      start_epoch = 0
 
     if os.path.exists(model_path):
         checkpoint = torch.load(model_path)
@@ -368,12 +430,13 @@ if __name__ == "__main__":
             epoch,
             writer,
             k=k,
-            add_tb_images=True,
+            add_tb_images=False,
             compute_top_k=True,
             dataset_obj=train_dataset,
+            test_dataloader=test_dataloader,
         )
         
-        print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
+        # print(f"Epoch {epoch+1}/{num_epochs}, Train Loss: {train_loss:.4f}")
         
         if (epoch + 1) % config["val_frequency"] == 0:
             val_loss, top_k_accuracy_val = validate(
@@ -382,7 +445,8 @@ if __name__ == "__main__":
                 criterion=criterion, 
                 epoch=epoch, 
                 tbwriter=writer, 
-                k=k
+                k=k,
+                test_dataloader=test_dataloader
             )
 
             print(f"Epoch {epoch+1}/{num_epochs}, Validation Loss: {val_loss:.4f}")
@@ -404,7 +468,9 @@ if __name__ == "__main__":
                             'val_loss': val_loss, 'top_k_accuracy_val': top_k_accuracy_val}
                 
                 with open(os.path.join(model_dir, "best_metrics.json"), "w+") as outfile: 
-                    json.dump(metrics, outfile)
+                    json.dump(metrics, outfile, indent=4)
+
+        scheduler.step()
 
     # Close Tensorboard writer
     writer.close()
