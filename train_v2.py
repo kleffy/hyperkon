@@ -265,6 +265,7 @@ if __name__ == "__main__":
     learning_rate = config["learning_rate"]
     stride = config["stride"]
     weka_mnt = config["weka_mnt"]
+
     load_only_L1 = config.get("load_only_L1")
     
     if weka_mnt:

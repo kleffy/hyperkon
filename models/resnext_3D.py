@@ -199,6 +199,7 @@ class ResNeXt(nn.Module):
 
     def forward(self, x):
         x = x.unsqueeze(2)  # Add a dummy dimension
+
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.relu(x)
@@ -213,7 +214,6 @@ class ResNeXt(nn.Module):
 
         embeddings = x.view(x.size(0), -1)  # Return embeddings directly
         return self.projector(embeddings)
-
 
 if __name__ == '__main__':
     from torchinfo import summary
@@ -231,3 +231,4 @@ if __name__ == '__main__':
     model.to(device)
     output = model(dummy_input.to(device))
     print(output.shape)
+

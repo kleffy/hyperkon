@@ -10,6 +10,7 @@ import glob
 def extract_percentile_range(data, lo, hi):
     plo = np.percentile(data, lo, axis=(1, 2), keepdims=True).astype(np.float16)
     phi = np.percentile(data, hi, axis=(1, 2), keepdims=True).astype(np.float16)
+
     # data = np.clip(data, plo, phi).astype(np.float16)
     with np.errstate(divide='ignore', invalid='ignore'):
         data = np.where(phi - plo == 0, 0, (data - plo) / (phi - plo))
