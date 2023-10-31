@@ -10,18 +10,18 @@ import glob
 def extract_percentile_range(data, lo, hi):
     plo = np.percentile(data, lo, axis=(1, 2), keepdims=True).astype(np.float16)
     phi = np.percentile(data, hi, axis=(1, 2), keepdims=True).astype(np.float16)
-    data = np.clip(data, plo, phi).astype(np.float16)
+    # data = np.clip(data, plo, phi).astype(np.float16)
     with np.errstate(divide='ignore', invalid='ignore'):
         data = np.where(phi - plo == 0, 0, (data - plo) / (phi - plo))
     return data
 
 # Parameters
-root_dir = "/vol/research/RobotFarming/Projects/hyperkon/database/test_train"
+root_dir = "/vol/research/RobotFarming/Projects/hyperkon/database/train"
 patch_size = 160
 stride = 160
 channels = 224
 lmdb_path = os.path.join(root_dir, "train.lmdb")
-map_size = 3_555_627_776  # Maximum storage size of the database
+map_size = 135_555_627_776  # Maximum storage size of the database
 
 # Find L1C and L2A image files
 l1c_folder = os.path.join(root_dir, "L1C")
